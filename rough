@@ -1,0 +1,23 @@
+steps:
+
+Adding a new racetrack to the system:
+
+1. take an image from racingcircuits.info as input
+    - limitations: no data on elevation and curbs - we could make assumptions about curbs near turns and generate them ourselves but it won't be perfect. or we could ditch curbs entirely and model the tracks such that it goes from tarmac to gravel directly.
+2. blur it aggressively and then generate a 2D matrix (gridworld) to "map" the racetrack - the resulting resolution should ideally strike the right balance between precision and computational efficiency - especially for big tracks like the nurburgring.
+    - each cell in the matrix is a state (MDP) and it can physically either be
+        a. part of the tarmac / asphalt,
+        b. part of the curbs - flat or sausage curbs (which would reduce speed significantly),
+        c. or part of the gravel / fence (we might need to automatically generate fences after adding "padding" beyond the curbs or where the gravel begins)
+        d. (optional) surface grip level (wet, dry, damp, etc.)
+    each of these states (cells) are also characterized by some of the car's characteristics: 
+    what speed the car is going at, what steering angle it is going at, how much brake pressure is applied etc. 
+        - could get very complicated if we wish to encode the arc the car has taken immediately before this cell to determine momentum, weight transfer, etc. to judge how well it will grip at current speed and brake pressure.
+3. store this 2D map in a json file in tracks/maps/
+
+Mapping the optimal racing line:
+
+Make an agent learn the track with value iteration / Q learning:
+1. Based on track layout and physics parameters of the track and car
+2. Store Q-values (and policy) - ideally use neural network instead of tabular Q learning - in a json file in tracks/q-values/
+3. If physics parameters are altered for the track, make the agent relearn the track and modify Q-values (or weights) accordingly to converge on the new optimal policy (racing line).
