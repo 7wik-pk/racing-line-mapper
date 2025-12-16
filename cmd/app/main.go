@@ -39,6 +39,7 @@ func (g *Game) Update() error {
 	}
 
 	// Toggle Speed
+	// TODO: change to toggle, currently this requires holding S
 	ticks := 1
 	if ebiten.IsKeyPressed(ebiten.KeyS) {
 		ticks = 100 // Speed up training
