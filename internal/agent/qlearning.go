@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"fmt"
 	"math"
 	"math/rand"
 	"racing-line-mapper/internal/physics"
@@ -19,8 +20,8 @@ const (
 
 // Hyperparameters
 const (
-	Alpha   = 0.1 // Learning Rate
-	Gamma   = 0.9 // Discount Factor
+	Alpha   = 0.01 // Learning Rate
+	Gamma   = 0.9998 // Discount Factor
 	Epsilon = 0.1 // Exploration Rate
 )
 
@@ -35,12 +36,18 @@ type State struct {
 // QTable stores the Q-values for state-action pairs.
 type QTable map[State][ActionCount]float64
 
-type Agent struct {
+type Agent interface {
+	SelectAction(state State) int
+	Learn(state State, action int, reward float64, nextState State)
+	DebugInfoStr() string
+}
+
+type AgentQTable struct {
 	QTable QTable
 }
 
-func NewAgent() *Agent {
-	return &Agent{
+func NewAgent() Agent {
+	return &AgentQTable{
 		QTable: make(QTable),
 	}
 }
@@ -118,7 +125,7 @@ func DiscretizeState(c *physics.Car, mesh *track.TrackMesh) State {
 }
 
 // SelectAction chooses an action using Epsilon-Greedy policy.
-func (a *Agent) SelectAction(state State) int {
+func (a *AgentQTable) SelectAction(state State) int {
 	if rand.Float64() < Epsilon {
 		return rand.Intn(ActionCount)
 	}
@@ -146,7 +153,7 @@ func (a *Agent) SelectAction(state State) int {
 }
 
 // Learn updates the Q-Table based on the transition.
-func (a *Agent) Learn(state State, action int, reward float64, nextState State) {
+func (a *AgentQTable) Learn(state State, action int, reward float64, nextState State) {
 	// Get current Q
 	qValues := a.QTable[state]
 	currentQ := qValues[action]
@@ -169,6 +176,10 @@ func (a *Agent) Learn(state State, action int, reward float64, nextState State) 
 
 	qValues[action] = newQ
 	a.QTable[state] = qValues
+}
+
+func (a *AgentQTable) DebugInfoStr() string {
+	return fmt.Sprintf("Agent Type: Q-Table\nQ-Table Size: %d", len(a.QTable))
 }
 
 // CalculateReward determines the reward for the current state.

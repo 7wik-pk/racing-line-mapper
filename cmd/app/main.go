@@ -20,7 +20,7 @@ type Game struct {
 	Mesh       *track.TrackMesh
 	TrackImage *ebiten.Image
 	Car        *physics.Car
-	Agent      *agent.Agent
+	Agent      agent.Agent
 	AIMode     bool
 	Training   bool // Fast forward
 }
@@ -100,6 +100,7 @@ func (g *Game) updatePhysics() {
 		// Auto respawn for AI, Manual for Human
 		if g.AIMode || ebiten.IsKeyPressed(ebiten.KeyR) {
 			// Respawn at closest waypoint to start
+			// TODO ensure starting location is appropriate based on track
 			startX, startY := 400.0, 110.0
 			if len(g.Mesh.Waypoints) > 0 {
 				startX = g.Mesh.Waypoints[0].Position.X
@@ -151,7 +152,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 
 	msg := fmt.Sprintf("Mode: %s | Speed: %.2f | Reward: %.2f", "Manual", g.Car.Speed, 0.0)
 	if g.AIMode {
-		msg = fmt.Sprintf("Mode: AI | Speed: %.2f | Q-Size: %d", g.Car.Speed, len(g.Agent.QTable))
+		msg = fmt.Sprintf("Mode: AI | Speed: %.2f | Agent-Info: %s", g.Car.Speed, g.Agent.DebugInfoStr())
 	}
 	if g.Car.Crashed {
 		msg += " [CRASHED]"
@@ -169,7 +170,7 @@ func RenderGrid(g *track.Grid) *ebiten.Image {
 	// We can map pixels directly
 	// For performance in Ebiten, it's better to use ReplacePixels or similar if we have the byte slice
 	// But since our Grid is a struct of Cells, we iterate.
-	// Optimization: Grid should probably hold a byte slice for the visual layer to avoid this loop every time we load.
+	// Optimization: Grid should probably hold a byte slice for the visual layer to avoid this loop every time we load - could make logic involving coords elsewhere harder to code.
 
 	pixels := make([]byte, g.Width*g.Height*4)
 	for y := 0; y < g.Height; y++ {
@@ -208,6 +209,7 @@ func main() {
 
 	trackImg := RenderGrid(grid)
 
+	// TODO: figure out how to dynamically display one part of a big track - for example, the Nurburgring can't be shown in an 800x600 window as it's very big - the car will be barely visible.
 	ebiten.SetWindowSize(800, 600)
 	ebiten.SetWindowTitle("Racing Line Mapper")
 
