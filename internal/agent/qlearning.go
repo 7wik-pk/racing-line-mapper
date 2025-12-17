@@ -22,8 +22,11 @@ const (
 const (
 	Alpha   = 0.01 // Learning Rate
 	Gamma   = 0.9998 // Discount Factor
-	Epsilon = 0.1 // Exploration Rate
+	MinEpsilon = 0.01
+	Decay = 0.9995 // Decay Rate
 )
+
+var Epsilon = 1.0
 
 // State represents the discretized state of the car.
 type State struct {
@@ -126,6 +129,9 @@ func DiscretizeState(c *physics.Car, mesh *track.TrackMesh) State {
 
 // SelectAction chooses an action using Epsilon-Greedy policy.
 func (a *AgentQTable) SelectAction(state State) int {
+
+	Epsilon = math.Max(Epsilon * Decay, MinEpsilon)
+
 	if rand.Float64() < Epsilon {
 		return rand.Intn(ActionCount)
 	}
@@ -201,15 +207,19 @@ func CalculateReward(c *physics.Car, grid *track.Grid, mesh *track.TrackMesh) fl
 
 	reward := speedAlongTrack * 2.0 // Multiplier to encourage speed
 
-	// 2. Centering Reward (Stay in middle lanes)
-	// Calculate Lateral Offset (d)
-	dx := c.Position.X - wp.Position.X
-	dy := c.Position.Y - wp.Position.Y
-	d := dx*wp.Normal.X + dy*wp.Normal.Y
+	// TODO: see if rewards can be issued for being at the right places in corners / turns - close to the outside edge of the road during corner entry and inside while hitting the apex, then close to the outside again when meeting the next section of the road (roughly).
+	// also see if rewards can be provided for optimum brake / throttle / accel levels during corner entry and exit.
 
-	if math.Abs(d) > 20 {
-		reward -= 2.0 // Penalty for being near edge
-	}
+	// DISABLED : AI suggested centering reward 
+	// // 2. Centering Reward (Stay in middle lanes)
+	// // Calculate Lateral Offset (d)
+	// dx := c.Position.X - wp.Position.X
+	// dy := c.Position.Y - wp.Position.Y
+	// d := dx*wp.Normal.X + dy*wp.Normal.Y
+
+	// if math.Abs(d) > 20 {
+	// 	reward -= 2.0 // Penalty for being near edge
+	// }
 
 	// 3. Gravel Penalty
 	cellX := int(c.Position.X)
