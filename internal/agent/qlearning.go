@@ -28,6 +28,13 @@ const (
 
 var Epsilon = 1.0
 
+// Rewards
+const (
+	RwCrash = -100.0
+	RwSpeedAlongTrackMultiplier = 1.0
+	RwGravel = -5.0
+)
+
 // State represents the discretized state of the car.
 type State struct {
 	SegmentIdx int // Progress along track (0..N)
@@ -191,7 +198,7 @@ func (a *AgentQTable) DebugInfoStr() string {
 // CalculateReward determines the reward for the current state.
 func CalculateReward(c *physics.Car, grid *track.Grid, mesh *track.TrackMesh) float64 {
 	if c.Crashed {
-		return -100.0
+		return RwCrash
 	}
 
 	// 1. Progress Reward
@@ -205,7 +212,7 @@ func CalculateReward(c *physics.Car, grid *track.Grid, mesh *track.TrackMesh) fl
 	// Dot product of Velocity and Tangent = Speed along track
 	speedAlongTrack := c.Velocity.X*tangentX + c.Velocity.Y*tangentY
 
-	reward := speedAlongTrack * 2.0 // Multiplier to encourage speed
+	reward := speedAlongTrack * RwSpeedAlongTrackMultiplier // Multiplier to encourage speed
 
 	// TODO: see if rewards can be issued for being at the right places in corners / turns - close to the outside edge of the road during corner entry and inside while hitting the apex, then close to the outside again when meeting the next section of the road (roughly).
 	// also see if rewards can be provided for optimum brake / throttle / accel levels during corner entry and exit.
@@ -227,8 +234,10 @@ func CalculateReward(c *physics.Car, grid *track.Grid, mesh *track.TrackMesh) fl
 	cell := grid.Get(cellX, cellY)
 
 	if cell.Type == track.CellGravel {
-		reward -= 5.0
+		reward -= RwGravel
 	}
+
+	// TODO: 4. Reward for finishing a lap on the circuit
 
 	return reward
 }

@@ -87,10 +87,11 @@ func (c *Car) Update(grid *track.Grid, throttle, brake, steering float64) {
 	cellY := int(c.Position.Y)
 	cell := grid.Get(cellX, cellY)
 
-	if cell.Type == track.CellGravel {
+	switch cell.Type {
+	case track.CellGravel:
 		grip = 0.5
 		c.Speed *= (1.0 - OffTrackFriction) // Slow down on gravel
-	} else if cell.Type == track.CellWall {
+	case track.CellWall:
 		c.Crashed = true
 		c.Speed = 0
 		return

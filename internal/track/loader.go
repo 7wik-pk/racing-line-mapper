@@ -36,9 +36,10 @@ func LoadTrackFromImage(path string) (*Grid, *TrackMesh, error) {
 			cellType := ColorToCellType(c)
 
 			friction := 1.0
-			if cellType == CellGravel {
+			switch cellType {
+			case CellGravel:
 				friction = 0.4
-			} else if cellType == CellWall {
+			case CellWall:
 				friction = 0.0
 			}
 
