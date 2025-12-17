@@ -21,12 +21,21 @@ type Car struct {
 	Heading  float64 // Radians
 	Speed    float64 // Scalar speed (forward/backward)
 	Crashed  bool
+
+	// Race State
+	Checkpoint     int // Index of the last passed waypoint
+	Laps           int
+	CurrentLapTime int // Ticks for current lap
+	LastLapTime    int // Ticks for previous lap
 }
 
 func NewCar(x, y float64) *Car {
 	return &Car{
-		Position: common.Vec2{X: x, Y: y},
-		Heading:  0,
+		Position:       common.Vec2{X: x, Y: y},
+		Heading:        0,
+		Checkpoint:     -1, // Not started
+		LastLapTime:    0,
+		CurrentLapTime: 0,
 	}
 }
 

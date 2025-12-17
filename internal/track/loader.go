@@ -78,14 +78,10 @@ func LoadTrackFromImage(path string) (*Grid, *TrackMesh, error) {
 }
 
 // GenerateMesh creates a centerline mesh from the grid.
-// This is a simplified "Flood Fill + Averaging" approach.
-// A robust approach would use Distance Transform + Skeletonization.
-// For this demo, we will trace the track by "walking" along the tarmac.
 func GenerateMesh(grid *Grid, startX, startY int) *TrackMesh {
-	waypoints := []Waypoint{}
+	rawWaypoints := []Waypoint{}
 
 	// 1. Find Center of Track at Start
-	// Scan left/right to find edges
 	leftX := startX
 	for leftX > 0 && grid.Cells[leftX][startY].Type != CellWall {
 		leftX--
@@ -95,72 +91,48 @@ func GenerateMesh(grid *Grid, startX, startY int) *TrackMesh {
 		rightX++
 	}
 
-	centerX := (leftX + rightX) / 2
-	centerY := startY
+	centerX := float64(leftX+rightX) / 2.0
+	centerY := float64(startY)
 	trackWidth := float64(rightX - leftX)
 
-	// 2. Walk the track
-	// We need a direction. Assume Start Line is vertical, so we move "Forward" (e.g. +X or +Y depending on track).
-	// Let's assume Counter-Clockwise loop.
-	// We'll use a "Walker" that looks ahead.
+	currX, currY := centerX, centerY
 
-	currX, currY := float64(centerX), float64(centerY)
-	visited := make(map[int]bool) // Key: y*width + x
+	// Initial Direction (Assume East for start)
+	dirX, dirY := 1.0, 0.0
 
-	// Initial direction: Try to find open space
-	dirX, dirY := 1.0, 0.0 // Try East first
+	stepSize := 20.0
+	visited := make(map[int]bool)
 
-	// Refined Walker:
-	// At each step, cast rays in an arc to find the "furthest open tarmac".
-	// This is like a "Lidar" based path finding.
-
-	totalDist := 0.0
-
-	for i := 0; i < 1000; i++ { // Safety break
-		// Record Waypoint
-		// Calculate Normal (Perpendicular to Dir)
-		normX, normY := -dirY, dirX // Rotate 90 deg
-
-		wp := Waypoint{
-			ID:       i,
-			Position: common.Vec2{X: currX, Y: currY},
-			Normal:   common.Vec2{X: normX, Y: normY}.Normalize(),
-			Width:    trackWidth, // Approximation
-			Distance: totalDist,
-		}
-		waypoints = append(waypoints, wp)
-
-		// Mark visited (roughly)
-		idx := int(currY)*grid.Width + int(currX)
-		visited[idx] = true
-
-		// Look ahead to find next center
-		// Cast 5 rays: -45, -22.5, 0, +22.5, +45 degrees relative to current Dir
+	for i := 0; i < 2000; i++ {
+		// Just move forward a bit to start the raycast
+		// Raycast in an arc to find the "deepest" path
 		bestAngle := 0.0
 		maxDepth := 0.0
 
 		baseAngle := math.Atan2(dirY, dirX)
 
-		for angleOffset := -math.Pi / 3; angleOffset <= math.Pi/3; angleOffset += math.Pi / 8 {
-			checkAngle := baseAngle + angleOffset
+		// Scan a wider arc to handle sharp turns
+		for angle := -math.Pi / 2; angle <= math.Pi/2; angle += math.Pi / 32 {
+			checkAngle := baseAngle + angle
 			dx := math.Cos(checkAngle)
 			dy := math.Sin(checkAngle)
 
-			// Raycast
+			// Beam length
 			depth := 0.0
-			for d := 1.0; d < 100.0; d += 2.0 {
-				checkX := int(currX + dx*d)
-				checkY := int(currY + dy*d)
+			for d := 5.0; d < 150.0; d += 5.0 {
+				cx := int(currX + dx*d)
+				cy := int(currY + dy*d)
 
-				if grid.Get(checkX, checkY).Type == CellWall {
+				// Stop at wall OR if checking backwards (visited)
+				// Simple visited check: don't go back near start unless looping
+				if grid.Get(cx, cy).Type == CellWall {
 					break
 				}
-
-				// Don't go back immediately (simple check)
-				// if visited[checkY*grid.Width+checkX] { depth -= 5.0 }
-
 				depth = d
 			}
+
+			// Bias towards straight lines slightly to reduce jitter
+			// depth *= (1.0 - math.Abs(angle)*0.1)
 
 			if depth > maxDepth {
 				maxDepth = depth
@@ -168,27 +140,155 @@ func GenerateMesh(grid *Grid, startX, startY int) *TrackMesh {
 			}
 		}
 
-		// Move
-		stepSize := 20.0 // Distance between waypoints
-		dirX = math.Cos(bestAngle)
-		dirY = math.Sin(bestAngle)
+		// New Direction
+		newDirX := math.Cos(bestAngle)
+		newDirY := math.Sin(bestAngle)
 
-		nextX := currX + dirX*stepSize
-		nextY := currY + dirY*stepSize
+		// Move to new point
+		currX += newDirX * stepSize
+		currY += newDirY * stepSize
 
-		// Check if we looped (close to start)
-		distToStart := math.Sqrt((nextX-float64(centerX))*(nextX-float64(centerX)) + (nextY-float64(centerY))*(nextY-float64(centerY)))
-		if i > 10 && distToStart < stepSize*1.5 {
-			break // Loop closed
+		// Update persistent direction (Exponential Moving Average for smoothness)
+		dirX = dirX*0.2 + newDirX*0.8
+		dirY = dirY*0.2 + newDirY*0.8
+
+		// Save Waypoint
+		// Normal is purely based on movement direction for now (Perpendicular)
+		normX, normY := -dirY, dirX
+		l := math.Sqrt(normX*normX + normY*normY)
+
+		wp := Waypoint{
+			ID:       i,
+			Position: common.Vec2{X: currX, Y: currY},
+			Normal:   common.Vec2{X: normX / l, Y: normY / l},
+			Width:    trackWidth,
+			Distance: float64(i) * stepSize,
+		}
+		rawWaypoints = append(rawWaypoints, wp)
+
+		visited[int(currY)*grid.Width+int(currX)] = true
+
+		// Loop Closure Check
+		// Only check if we have traveled a bit
+		if i > 50 {
+			distToStart := math.Sqrt((currX-centerX)*(currX-centerX) + (currY-centerY)*(currY-centerY))
+			if distToStart < stepSize*2 {
+				break
+			}
+		}
+	}
+
+	// 2. Refinement Pass ("Elastic Band" / Iterative Centering)
+	// The initial walker might be biased or cut corners.
+	// We iterate to pull every point towards the true geometric center.
+	refinedWaypoints := make([]Waypoint, len(rawWaypoints))
+	copy(refinedWaypoints, rawWaypoints)
+
+	// Number of relaxation iterations
+	for iter := 0; iter < 10; iter++ {
+		for i := 0; i < len(refinedWaypoints); i++ {
+			wp := refinedWaypoints[i]
+
+			// Calculate approximate tangent from neighbors
+			prev := refinedWaypoints[(i-1+len(refinedWaypoints))%len(refinedWaypoints)]
+			next := refinedWaypoints[(i+1)%len(refinedWaypoints)]
+
+			tx := next.Position.X - prev.Position.X
+			ty := next.Position.Y - prev.Position.Y
+
+			// Normal = (-ty, tx)
+			nx, ny := -ty, tx
+			l := math.Sqrt(nx*nx + ny*ny)
+			if l == 0 {
+				continue
+			}
+			nx /= l
+			ny /= l
+
+			// Raycast Left/Right to find walls
+			dLeft := 0.0
+			foundLeft := false
+			for d := 1.0; d < 80.0; d += 1.0 {
+				cx := int(wp.Position.X + nx*d)
+				cy := int(wp.Position.Y + ny*d)
+				if grid.Get(cx, cy).Type == CellWall {
+					dLeft = d
+					foundLeft = true
+					break
+				}
+			}
+
+			dRight := 0.0
+			foundRight := false
+			for d := 1.0; d < 80.0; d += 1.0 {
+				cx := int(wp.Position.X - nx*d)
+				cy := int(wp.Position.Y - ny*d)
+				if grid.Get(cx, cy).Type == CellWall {
+					dRight = d
+					foundRight = true
+					break
+				}
+			}
+
+			// Move point towards center
+			if foundLeft && foundRight {
+				// We want dLeft == dRight.
+				// Error = dLeft - dRight.
+				// Correction = Error / 2
+				correction := (dLeft - dRight) / 2.0
+
+				// Alpha blend for stability (0.5)
+				refinedWaypoints[i].Position.X += nx * correction * 0.5
+				refinedWaypoints[i].Position.Y += ny * correction * 0.5
+
+				// Update Width estimate
+				refinedWaypoints[i].Width = dLeft + dRight
+			}
+		}
+	}
+
+	// 3. Final Smoothing Pass (Moving Average)
+	smoothedWaypoints := make([]Waypoint, len(refinedWaypoints))
+	copy(smoothedWaypoints, refinedWaypoints)
+
+	// Two passes of smoothing for positions
+	for pass := 0; pass < 2; pass++ {
+		temp := make([]Waypoint, len(smoothedWaypoints))
+		copy(temp, smoothedWaypoints)
+
+		for i := 0; i < len(smoothedWaypoints); i++ {
+			sumX, sumY := 0.0, 0.0
+			window := 5
+			for j := -window / 2; j <= window/2; j++ {
+				idx := (i + j + len(smoothedWaypoints)) % len(smoothedWaypoints)
+				sumX += temp[idx].Position.X
+				sumY += temp[idx].Position.Y
+			}
+			smoothedWaypoints[i].Position.X = sumX / float64(window)
+			smoothedWaypoints[i].Position.Y = sumY / float64(window)
+		}
+	}
+
+	// Recompute Final Normals
+	for i := 0; i < len(smoothedWaypoints); i++ {
+		prev := smoothedWaypoints[(i-1+len(smoothedWaypoints))%len(smoothedWaypoints)]
+		next := smoothedWaypoints[(i+1)%len(smoothedWaypoints)]
+
+		dx := next.Position.X - prev.Position.X
+		dy := next.Position.Y - prev.Position.Y
+
+		nx, ny := -dy, dx
+		len := math.Sqrt(nx*nx + ny*ny)
+		if len > 0 {
+			smoothedWaypoints[i].Normal = common.Vec2{X: nx / len, Y: ny / len}
 		}
 
-		currX = nextX
-		currY = nextY
-		totalDist += stepSize
+		// Copy width from refined
+		smoothedWaypoints[i].Width = refinedWaypoints[i].Width
 	}
 
 	return &TrackMesh{
-		Waypoints: waypoints,
-		TotalLen:  totalDist,
+		Waypoints: smoothedWaypoints,
+		TotalLen:  float64(len(smoothedWaypoints)) * stepSize,
 	}
 }

@@ -20,19 +20,19 @@ const (
 
 // Hyperparameters
 const (
-	Alpha   = 0.01 // Learning Rate
-	Gamma   = 0.9998 // Discount Factor
-	MinEpsilon = 0.01
-	Decay = 0.9995 // Decay Rate
+	Alpha float64     = 0.1   // Learning Rate
+	Gamma float64      = 0.999987 // Discount Factor
+	MinEpsilon float64 = 0.005
+	Decay      float64 = 0.9999875 // Decay Rate
 )
 
 var Epsilon = 1.0
 
 // Rewards
 const (
-	RwCrash = -100.0
+	RwCrash                     = -100.0
 	RwSpeedAlongTrackMultiplier = 1.0
-	RwGravel = -5.0
+	RwGravel                    = -5.0
 )
 
 // State represents the discretized state of the car.
@@ -137,7 +137,7 @@ func DiscretizeState(c *physics.Car, mesh *track.TrackMesh) State {
 // SelectAction chooses an action using Epsilon-Greedy policy.
 func (a *AgentQTable) SelectAction(state State) int {
 
-	Epsilon = math.Max(Epsilon * Decay, MinEpsilon)
+	Epsilon = math.Max(Epsilon*Decay, MinEpsilon)
 
 	if rand.Float64() < Epsilon {
 		return rand.Intn(ActionCount)
@@ -192,18 +192,19 @@ func (a *AgentQTable) Learn(state State, action int, reward float64, nextState S
 }
 
 func (a *AgentQTable) DebugInfoStr() string {
-	return fmt.Sprintf("Agent Type: Q-Table\nQ-Table Size: %d", len(a.QTable))
+	return fmt.Sprintf("Type: Q-Table\nQ-Size:  %d\nAlpha:   %.8f\nGamma:   %.8f\nEpsilon: %.8f\nDecay:   %.8f",
+		len(a.QTable), Alpha, Gamma, Epsilon, Decay)
 }
 
 // CalculateReward determines the reward for the current state.
-func CalculateReward(c *physics.Car, grid *track.Grid, mesh *track.TrackMesh) float64 {
+func CalculateReward(c *physics.Car, grid *track.Grid, mesh *track.TrackMesh, bestLapTime int) float64 {
 	if c.Crashed {
 		return RwCrash
 	}
 
 	// 1. Progress Reward
 	// We want to maximize speed along the track direction (s-velocity)
-	wp, _ := mesh.GetClosestWaypoint(c.Position)
+	wp, wpIdx := mesh.GetClosestWaypoint(c.Position)
 
 	// Tangent vector
 	tangentX := wp.Normal.Y
@@ -217,16 +218,15 @@ func CalculateReward(c *physics.Car, grid *track.Grid, mesh *track.TrackMesh) fl
 	// TODO: see if rewards can be issued for being at the right places in corners / turns - close to the outside edge of the road during corner entry and inside while hitting the apex, then close to the outside again when meeting the next section of the road (roughly).
 	// also see if rewards can be provided for optimum brake / throttle / accel levels during corner entry and exit.
 
-	// DISABLED : AI suggested centering reward 
-	// // 2. Centering Reward (Stay in middle lanes)
-	// // Calculate Lateral Offset (d)
-	// dx := c.Position.X - wp.Position.X
-	// dy := c.Position.Y - wp.Position.Y
-	// d := dx*wp.Normal.X + dy*wp.Normal.Y
+	// 2. Centering Reward (Stay in middle lanes)
+	// Calculate Lateral Offset (d)
+	dx := c.Position.X - wp.Position.X
+	dy := c.Position.Y - wp.Position.Y
+	d := dx*wp.Normal.X + dy*wp.Normal.Y
 
-	// if math.Abs(d) > 20 {
-	// 	reward -= 2.0 // Penalty for being near edge
-	// }
+	if math.Abs(d) > 20 {
+		reward -= 2.0 // Penalty for being near edge
+	}
 
 	// 3. Gravel Penalty
 	cellX := int(c.Position.X)
@@ -237,7 +237,66 @@ func CalculateReward(c *physics.Car, grid *track.Grid, mesh *track.TrackMesh) fl
 		reward -= RwGravel
 	}
 
-	// TODO: 4. Reward for finishing a lap on the circuit
+	// 4. Time/Stationary Penalty
+	// Penalize just existing to encourage finishing fast
+	// Extra penalty if actually stopped
+	reward -= 1.0
+
+	if c.Speed < 0.1 {
+		reward -= 10.0 // Heavy penalty for stopping
+	}
+
+	// 5. Backwards Penalty
+	// If speedAlongTrack is negative, we are going wrong way
+	if speedAlongTrack < -0.1 {
+		reward -= 20.0 // Very heavy penalty for wrong way
+	}
+
+	// 6. Checkpoint & Lap Reward
+
+	// Check strictly sequential progress
+	// Allow small skips (e.g. 1->3 is ok, 1->10 is cheating/cutting)
+	// Also handle lap wrap-around (End -> 0)
+
+	validProgress := false
+	diff := wpIdx - c.Checkpoint
+
+	// Normal process: moved forward by 1-5 waypoints
+	if diff > 0 && diff < 10 {
+		validProgress = true
+	}
+
+	// Lap wrap-around: Last few checkpoints -> First few
+	// e.g. MeshLen=100. Current=98. Next=1.
+	if c.Checkpoint > len(mesh.Waypoints)-10 && wpIdx < 10 {
+		validProgress = true
+		c.Laps++
+
+		// Major Lap Reward base
+		reward += 1000.0
+
+		// Personal Best Bonus
+		// If we beat the best time (or if no best time exists/0), give bonus
+		// bestLapTime comes from Game, in ticks.
+		// c.CurrentLapTime is what we just finished.
+
+		// Note: c.CurrentLapTime is handled in main loop tick update, let's assume it's accurate at moment of crossing.
+		if bestLapTime > 0 && c.CurrentLapTime < bestLapTime {
+			// Improvement Bonus
+			improvement := float64(bestLapTime - c.CurrentLapTime)
+			// e.g. Improved by 100 ticks (1.6s) -> 100 * 5 = 500 extra reward
+			reward += improvement * 5.0
+
+			// Just for beating PB
+			reward += 500.0
+		}
+	}
+
+	if validProgress || c.Checkpoint == -1 {
+		c.Checkpoint = wpIdx
+		// Small bonus for verifying checkpoint (milestone)
+		reward += 10.0
+	}
 
 	return reward
 }
