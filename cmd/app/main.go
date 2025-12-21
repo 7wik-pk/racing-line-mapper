@@ -359,7 +359,7 @@ func main() {
 	car := physics.NewCar(startX, startY)
 	ag := agent.NewAgent()
 
-	if err := ebiten.RunGame(&Game{Grid: grid, Mesh: mesh, TrackImage: trackImg, Car: car, Agent: ag, AIMode: true, Training: false}); err != nil {
+	if err := ebiten.RunGame(&Game{Grid: grid, Mesh: mesh, TrackImage: trackImg, Car: car, Agent: ag, AIMode: true, Training: true}); err != nil {
 		log.Fatal(err)
 	}
 }

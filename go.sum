@@ -1,3 +1,5 @@
+github.com/cnkei/gospline v0.0.0-20191204052713-d67fac29a294 h1:zIFcK9T9qytnmXuKt5Z7jG66C8c8FJjy8rtxOmVVm0o=
+github.com/cnkei/gospline v0.0.0-20191204052713-d67fac29a294/go.mod h1:DXXGDL64/wxXgBSgmGMEL0vYC0tdvpgNhkJrvavhqDM=
 github.com/ebitengine/gomobile v0.0.0-20250923094054-ea854a63cce1 h1:+kz5iTT3L7uU+VhlMfTb8hHcxLO3TlaELlX8wa4XjA0=
 github.com/ebitengine/gomobile v0.0.0-20250923094054-ea854a63cce1/go.mod h1:lKJoeixeJwnFmYsBny4vvCJGVFc3aYDalhuDsfZzWHI=
 github.com/ebitengine/hideconsole v1.0.0 h1:5J4U0kXF+pv/DhiXt5/lTz0eO5ogJ1iXb8Yj1yReDqE=
