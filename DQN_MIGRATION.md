@@ -62,3 +62,9 @@ DQN introduces new parameters to tune:
 2.  **Implement Replay Buffer**: Create a concurrent-safe ring buffer.
 3.  **Implement Network**: Choose library or write simple Matrix math struct.
 4.  **Connect**: Hook up the batch sampling loop in `main.go`.
+
+# Manual notes for future scope / other things to consider
+
+Consider adding staged training - each stage to teach the DQN different things with different rewards structures - such as first stage could be in an oval/rectangular circuit where we teach the agent going outside the track is bad, another stage where being fast out of corners is good, etc.
+Consider making the DQN weights storeable - so that a ready-made agent model can be stored after the first few staged training stages to be used on actual track images
+Finally, consider making the agent universal - i.e., a DQN that is trained on all tracks and can "observe" the whole track. What track the agent is in (or the track's encoding in some way) should be extra dimensions of state space (or input features fed into the network).
