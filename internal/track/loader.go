@@ -330,7 +330,7 @@ func GenerateMesh(grid *Grid, startX, startY int) *TrackMesh {
 
 		for i := 0; i < len(smoothedWaypoints); i++ {
 			sumX, sumY := 0.0, 0.0
-			window := 7 // Reduced from 15 to 7 to preserve curve geometry
+			window := 3 // Reduced from 15 to 3 to preserve curve geometry
 			for j := -window / 2; j <= window/2; j++ {
 				idx := (i + j + len(smoothedWaypoints)) % len(smoothedWaypoints)
 				sumX += temp[idx].Position.X

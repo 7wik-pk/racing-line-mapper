@@ -17,10 +17,49 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/vector"
 )
 
+// ============================================================================
+// CONFIGURATION - Adjust these values to customize the simulation
+// ============================================================================
+
+// Input track file path
+const InputTrackPath = "processed_tracks/monza_10m.jpg"
+
+// Render window dimensions
 const (
 	WindowWidth  = 1200
 	WindowHeight = 800
 )
+
+// Simulation settings
+const (
+	TrainingSpeedMultiplier = 3000 // Ticks per frame in training mode (1 = real-time)
+	CarSpawnWaypointIndex   = 5    // Which waypoint to spawn the car at (0 = start marker)
+	ViewScaleMargin         = 0.95 // Margin for fitting track in window (0.95 = 5% padding)
+)
+
+// Track surface colors
+var (
+	ColorTarmac = color.RGBA{80, 80, 80, 255}
+	ColorGravel = color.RGBA{20, 20, 20, 255}
+	ColorWall   = color.RGBA{10, 10, 10, 255}
+	ColorStart  = color.RGBA{255, 0, 0, 255}
+	ColorDir    = color.RGBA{255, 255, 0, 255}
+)
+
+// Visualization colors
+var (
+	ColorFrenetFrame = color.RGBA{50, 155, 50, 40} // Bright Green (was: 100, 200, 255, 150 for Cyan)
+	ColorCar         = color.RGBA{255, 0, 0, 255}    // Red
+	ColorCarHeading  = color.RGBA{255, 255, 0, 255}  // Yellow
+	ColorBestLap     = color.RGBA{50, 255, 50, 150}  // Light Green
+	ColorCurrentLap  = color.RGBA{255, 255, 0, 200}  // Yellow
+	ColorLapHistory1 = color.RGBA{255, 0, 255, 255}  // Magenta (most recent)
+	ColorLapHistory2 = color.RGBA{190, 0, 190, 150}  // Faded Magenta
+	ColorLapHistory3 = color.RGBA{130, 0, 130, 70}   // More Faded
+	ColorLapHistory4 = color.RGBA{70, 0, 70, 20}     // Most Faded
+)
+
+// ============================================================================
 
 type Game struct {
 	Grid       *track.Grid
@@ -60,7 +99,7 @@ func (g *Game) Update() error {
 
 	ticks := 1
 	if g.Training {
-		ticks = 3000 // Speed up training
+		ticks = TrainingSpeedMultiplier
 	}
 
 	for i := 0; i < ticks; i++ {
@@ -187,7 +226,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 			// Draw Rib (Normal) using ACTUAL track width
 			p1x, p1y := toScreen(wp.Position.X-wp.Normal.X*(wp.Width/2), wp.Position.Y-wp.Normal.Y*(wp.Width/2))
 			p2x, p2y := toScreen(wp.Position.X+wp.Normal.X*(wp.Width/2), wp.Position.Y+wp.Normal.Y*(wp.Width/2))
-			vector.StrokeLine(screen, p1x, p1y, p2x, p2y, 1, color.RGBA{0, 100, 100, 100}, true)
+			vector.StrokeLine(screen, p1x, p1y, p2x, p2y, 1, ColorFrenetFrame, true)
 		}
 	}
 
@@ -196,16 +235,16 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		for j := 0; j < len(g.BestLapPath)-1; j++ {
 			p1x, p1y := toScreen(g.BestLapPath[j].X, g.BestLapPath[j].Y)
 			p2x, p2y := toScreen(g.BestLapPath[j+1].X, g.BestLapPath[j+1].Y)
-			vector.StrokeLine(screen, p1x, p1y, p2x, p2y, 3, color.RGBA{50, 255, 50, 150}, true)
+			vector.StrokeLine(screen, p1x, p1y, p2x, p2y, 3, ColorBestLap, true)
 		}
 	}
 
 	// Draw Tracelines (History)
 	traceColors := []color.RGBA{
-		{255, 0, 255, 255}, // Magenta Solid
-		{190, 0, 190, 150},
-		{130, 0, 130, 70},
-		{70, 0, 70, 20},
+		ColorLapHistory1,
+		ColorLapHistory2,
+		ColorLapHistory3,
+		ColorLapHistory4,
 	}
 
 	for i, path := range g.LapHistory {
@@ -224,7 +263,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		for j := 0; j < len(g.CurrentLapPath)-1; j++ {
 			p1x, p1y := toScreen(g.CurrentLapPath[j].X, g.CurrentLapPath[j].Y)
 			p2x, p2y := toScreen(g.CurrentLapPath[j+1].X, g.CurrentLapPath[j+1].Y)
-			vector.StrokeLine(screen, p1x, p1y, p2x, p2y, 2, color.RGBA{255, 255, 0, 200}, true)
+			vector.StrokeLine(screen, p1x, p1y, p2x, p2y, 2, ColorCurrentLap, true)
 		}
 	}
 
@@ -261,7 +300,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		path.Close()
 
 		var cs ebiten.ColorScale
-		cs.ScaleWithColor(color.RGBA{255, 0, 0, 255})
+		cs.ScaleWithColor(ColorCar)
 		vector.FillPath(screen, &path, nil, &vector.DrawPathOptions{
 			AntiAlias:  true,
 			ColorScale: cs,
@@ -273,7 +312,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 			g.Car.Position.X+math.Cos(g.Car.Heading)*(g.Car.Length/2+5),
 			g.Car.Position.Y+math.Sin(g.Car.Heading)*(g.Car.Length/2+5),
 		)
-		vector.StrokeLine(screen, headX, headY, tipX, tipY, 2, color.RGBA{255, 255, 0, 255}, true)
+		vector.StrokeLine(screen, headX, headY, tipX, tipY, 2, ColorCarHeading, true)
 	}
 
 	// Draw HUD Background
@@ -302,22 +341,21 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	msg += fmt.Sprintf("Best:    %.2fs\n", bestTimeSec)
 
 	// Draw Agent Specs Panel (Top Right)
-	// 550, 0 position
 	if g.AIMode {
-		vector.FillRect(screen, 650, 0, 140, 150, color.RGBA{0, 0, 0, 180}, true)
+		panelW := 140.0
+		panelH := 150.0
+		padding := 10.0
+
+		targetX := float32(WindowWidth) - float32(panelW) - float32(padding)
+		targetY := float32(padding)
+
+		vector.FillRect(screen, targetX, 0, float32(panelW), float32(panelH), color.RGBA{0, 0, 0, 180}, true)
 
 		specs := "AGENT PARAMS\n"
 		specs += "------------\n"
 		specs += g.Agent.DebugInfoStr()
 
-		// Draw at 560, 10 (approx via spacing hack or just Print)
-		// Since DebugPrint is at 0,0, we need a way to draw text at X,Y.
-		// Standard Ebiten doesn't make this easy without loading a font face.
-		// However, we can trick it by using `ebitenutil.DebugPrintAt` which DOES exist in recent versions?
-		// Let's assume it does not.
-		// If I cannot use DebugPrintAt, I will append to the main block but that ruins the "top right" requirement.
-
-		ebitenutil.DebugPrintAt(screen, specs, 660, 10)
+		ebitenutil.DebugPrintAt(screen, specs, int(targetX)+10, int(targetY))
 	}
 
 	if g.Car.Crashed {
@@ -371,15 +409,15 @@ func RenderGrid(g *track.Grid) *ebiten.Image {
 			var r, gr, b byte
 			switch cell.Type {
 			case track.CellTarmac:
-				r, gr, b = 100, 100, 100 // Gray for Tarmac (Rendering only)
+				r, gr, b = ColorTarmac.R, ColorTarmac.G, ColorTarmac.B
 			case track.CellGravel:
-				r, gr, b = 150, 150, 150 // Grayish
+				r, gr, b = ColorGravel.R, ColorGravel.G, ColorGravel.B
 			case track.CellWall:
-				r, gr, b = 0, 0, 0 // Black
+				r, gr, b = ColorWall.R, ColorWall.G, ColorWall.B
 			case track.CellStart:
-				r, gr, b = 255, 0, 0 // Red
+				r, gr, b = ColorStart.R, ColorStart.G, ColorStart.B
 			case track.CellDirection:
-				r, gr, b = 255, 255, 0 // Yellow
+				r, gr, b = ColorDir.R, ColorDir.G, ColorDir.B
 			}
 
 			pixels[idx] = r
@@ -394,9 +432,7 @@ func RenderGrid(g *track.Grid) *ebiten.Image {
 }
 
 func main() {
-	// For now, let's point to the processed Monza track
-	// trackPath := "assets/track.png"
-	trackPath := "processed_tracks/monza_10m.jpg"
+	trackPath := InputTrackPath
 	grid, mesh, err := track.LoadTrackFromImage(trackPath)
 	if err != nil {
 		// Fallback to assets/track.png if not found
@@ -422,7 +458,7 @@ func main() {
 		viewScale = float32(scaleH)
 	}
 	// Add some margin
-	viewScale *= 0.95
+	viewScale *= ViewScaleMargin
 
 	// 2. Center the track
 	viewOffsetX := (float32(winW) - float32(grid.Width)*viewScale) / 2
@@ -432,8 +468,8 @@ func main() {
 	startX, startY := 400.0, 110.0
 	startHeading := 0.0
 	if len(mesh.Waypoints) > 0 {
-		// Start slightly ahead (5th waypoint) to avoid edge clipping
-		startIdx := 5
+		// Start at configured waypoint index
+		startIdx := CarSpawnWaypointIndex
 		if startIdx >= len(mesh.Waypoints) {
 			startIdx = 0
 		}
