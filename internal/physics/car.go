@@ -132,6 +132,8 @@ func (c *Car) Update(grid *track.Grid, throttle, brake, steering float64) {
 			return
 		case track.CellGravel:
 			onGravel = true
+		case track.CellDirection:
+			// Treat as Tarmac (Safe)
 		}
 	}
 

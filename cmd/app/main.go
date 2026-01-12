@@ -17,6 +17,11 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/vector"
 )
 
+const (
+	WindowWidth  = 1200
+	WindowHeight = 800
+)
+
 type Game struct {
 	Grid       *track.Grid
 	Mesh       *track.TrackMesh
@@ -33,6 +38,11 @@ type Game struct {
 	CurrentLapPath []common.Vec2   // Path of current lap
 	LapHistory     [][]common.Vec2 // Paths of last 4 laps
 	PreviousLaps   int             // To detect lap change
+
+	// Rendering Scale
+	ViewScale   float32
+	ViewOffsetX float32
+	ViewOffsetY float32
 }
 
 func (g *Game) Update() error {
@@ -92,6 +102,10 @@ func (g *Game) updatePhysics() {
 
 	// Reset if crashed
 	if g.Car.Crashed {
+		// cx, cy := int(g.Car.Position.X), int(g.Car.Position.Y)
+		// cell := g.Grid.Get(cx, cy)
+		// fmt.Printf("[CRASH] Pos: (%.1f, %.1f) Cell: %d\n", g.Car.Position.X, g.Car.Position.Y, cell.Type)
+
 		// Penalty for crashing is handled in Learn step usually, but here we just reset
 		// If AI, we need to record the crash state
 		if g.AIMode {
@@ -154,37 +168,39 @@ func (g *Game) updatePhysics() {
 }
 
 func (g *Game) Draw(screen *ebiten.Image) {
+	// Draw Track Image
 	if g.TrackImage != nil {
-		screen.DrawImage(g.TrackImage, nil)
+		op := &ebiten.DrawImageOptions{}
+		op.GeoM.Scale(float64(g.ViewScale), float64(g.ViewScale))
+		op.GeoM.Translate(float64(g.ViewOffsetX), float64(g.ViewOffsetY))
+		screen.DrawImage(g.TrackImage, op)
+	}
+
+	// Helper to transform world coordinates to screen coordinates
+	toScreen := func(x, y float64) (float32, float32) {
+		return float32(x)*g.ViewScale + g.ViewOffsetX, float32(y)*g.ViewScale + g.ViewOffsetY
 	}
 
 	// Draw Mesh (Debug)
 	if g.Mesh != nil {
 		for _, wp := range g.Mesh.Waypoints {
-			// Draw Center point
-			// vector.FillCircle(screen, float32(wp.Position.X), float32(wp.Position.Y), 2, color.RGBA{0, 255, 255, 255}, true)
-
-			// Draw Rib (Normal)
-			p1x := wp.Position.X - wp.Normal.X*20
-			p1y := wp.Position.Y - wp.Normal.Y*20
-			p2x := wp.Position.X + wp.Normal.X*20
-			p2y := wp.Position.Y + wp.Normal.Y*20
-			vector.StrokeLine(screen, float32(p1x), float32(p1y), float32(p2x), float32(p2y), 1, color.RGBA{0, 100, 100, 50}, true)
+			// Draw Rib (Normal) using ACTUAL track width
+			p1x, p1y := toScreen(wp.Position.X-wp.Normal.X*(wp.Width/2), wp.Position.Y-wp.Normal.Y*(wp.Width/2))
+			p2x, p2y := toScreen(wp.Position.X+wp.Normal.X*(wp.Width/2), wp.Position.Y+wp.Normal.Y*(wp.Width/2))
+			vector.StrokeLine(screen, p1x, p1y, p2x, p2y, 1, color.RGBA{0, 100, 100, 100}, true)
 		}
 	}
 
 	// Draw Best Lap Path (Light Green)
 	if len(g.BestLapPath) > 1 {
 		for j := 0; j < len(g.BestLapPath)-1; j++ {
-			p1 := g.BestLapPath[j]
-			p2 := g.BestLapPath[j+1]
-			vector.StrokeLine(screen, float32(p1.X), float32(p1.Y), float32(p2.X), float32(p2.Y), 3, color.RGBA{50, 255, 50, 150}, true)
+			p1x, p1y := toScreen(g.BestLapPath[j].X, g.BestLapPath[j].Y)
+			p2x, p2y := toScreen(g.BestLapPath[j+1].X, g.BestLapPath[j+1].Y)
+			vector.StrokeLine(screen, p1x, p1y, p2x, p2y, 3, color.RGBA{50, 255, 50, 150}, true)
 		}
 	}
 
 	// Draw Tracelines (History)
-	// Index 0 = Most Recent (Darkest)
-	// Colors: use Red/Purple for traces
 	traceColors := []color.RGBA{
 		{255, 0, 255, 255}, // Magenta Solid
 		{190, 0, 190, 150},
@@ -196,9 +212,9 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		col := traceColors[i]
 		if len(path) > 1 {
 			for j := 0; j < len(path)-1; j++ {
-				p1 := path[j]
-				p2 := path[j+1]
-				vector.StrokeLine(screen, float32(p1.X), float32(p1.Y), float32(p2.X), float32(p2.Y), 2, col, true)
+				p1x, p1y := toScreen(path[j].X, path[j].Y)
+				p2x, p2y := toScreen(path[j+1].X, path[j+1].Y)
+				vector.StrokeLine(screen, p1x, p1y, p2x, p2y, 2, col, true)
 			}
 		}
 	}
@@ -206,9 +222,9 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	// Draw Current Path (Yellow)
 	if len(g.CurrentLapPath) > 1 {
 		for j := 0; j < len(g.CurrentLapPath)-1; j++ {
-			p1 := g.CurrentLapPath[j]
-			p2 := g.CurrentLapPath[j+1]
-			vector.StrokeLine(screen, float32(p1.X), float32(p1.Y), float32(p2.X), float32(p2.Y), 2, color.RGBA{255, 255, 0, 200}, true)
+			p1x, p1y := toScreen(g.CurrentLapPath[j].X, g.CurrentLapPath[j].Y)
+			p2x, p2y := toScreen(g.CurrentLapPath[j+1].X, g.CurrentLapPath[j+1].Y)
+			vector.StrokeLine(screen, p1x, p1y, p2x, p2y, 2, color.RGBA{255, 255, 0, 200}, true)
 		}
 	}
 
@@ -216,11 +232,11 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		// Draw Car as Rotated Rectangle
 		cosH := math.Cos(g.Car.Heading)
 		sinH := math.Sin(g.Car.Heading)
-		halfW := float32(g.Car.Width / 2)
-		halfL := float32(g.Car.Length / 2)
+		halfW := g.Car.Width / 2
+		halfL := g.Car.Length / 2
 
-		// 4 corners
-		corners := [4][2]float32{
+		// 4 corners in world space
+		worldCorners := [4][2]float64{
 			{halfL, halfW},
 			{halfL, -halfW},
 			{-halfL, -halfW},
@@ -228,19 +244,22 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		}
 
 		var path vector.Path
-		for i, p := range corners {
-			// Rotate and Translate
-			rx := float32(g.Car.Position.X) + p[0]*float32(cosH) - p[1]*float32(sinH)
-			ry := float32(g.Car.Position.Y) + p[0]*float32(sinH) + p[1]*float32(cosH)
+		for i, p := range worldCorners {
+			// Rotate and Translate in world space
+			wx := g.Car.Position.X + p[0]*cosH - p[1]*sinH
+			wy := g.Car.Position.Y + p[0]*sinH + p[1]*cosH
+
+			// Transform to screen space
+			sx, sy := toScreen(wx, wy)
+
 			if i == 0 {
-				path.MoveTo(rx, ry)
+				path.MoveTo(sx, sy)
 			} else {
-				path.LineTo(rx, ry)
+				path.LineTo(sx, sy)
 			}
 		}
 		path.Close()
 
-		// Fill the rectangle using the modern FillPath API
 		var cs ebiten.ColorScale
 		cs.ScaleWithColor(color.RGBA{255, 0, 0, 255})
 		vector.FillPath(screen, &path, nil, &vector.DrawPathOptions{
@@ -249,9 +268,12 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		})
 
 		// Draw Heading (Slightly longer than car)
-		endX := g.Car.Position.X + math.Cos(g.Car.Heading)*(g.Car.Length/2+5)
-		endY := g.Car.Position.Y + math.Sin(g.Car.Heading)*(g.Car.Length/2+5)
-		vector.StrokeLine(screen, float32(g.Car.Position.X), float32(g.Car.Position.Y), float32(endX), float32(endY), 2, color.RGBA{255, 255, 0, 255}, true)
+		headX, headY := toScreen(g.Car.Position.X, g.Car.Position.Y)
+		tipX, tipY := toScreen(
+			g.Car.Position.X+math.Cos(g.Car.Heading)*(g.Car.Length/2+5),
+			g.Car.Position.Y+math.Sin(g.Car.Heading)*(g.Car.Length/2+5),
+		)
+		vector.StrokeLine(screen, headX, headY, tipX, tipY, 2, color.RGBA{255, 255, 0, 255}, true)
 	}
 
 	// Draw HUD Background
@@ -330,7 +352,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 }
 
 func (g *Game) Layout(outsideWidth, outsideHeight int) (screenWidth, screenHeight int) {
-	return 800, 600
+	return WindowWidth, WindowHeight // 1024x840
 }
 
 func RenderGrid(g *track.Grid) *ebiten.Image {
@@ -349,13 +371,15 @@ func RenderGrid(g *track.Grid) *ebiten.Image {
 			var r, gr, b byte
 			switch cell.Type {
 			case track.CellTarmac:
-				r, gr, b = 50, 50, 50 // Dark Gray
+				r, gr, b = 100, 100, 100 // Gray for Tarmac (Rendering only)
 			case track.CellGravel:
-				r, gr, b = 0, 200, 0 // Green
+				r, gr, b = 150, 150, 150 // Grayish
 			case track.CellWall:
-				r, gr, b = 255, 255, 255 // White
+				r, gr, b = 0, 0, 0 // Black
 			case track.CellStart:
-				r, gr, b = 200, 0, 0 // Red
+				r, gr, b = 255, 0, 0 // Red
+			case track.CellDirection:
+				r, gr, b = 255, 255, 0 // Yellow
 			}
 
 			pixels[idx] = r
@@ -370,28 +394,81 @@ func RenderGrid(g *track.Grid) *ebiten.Image {
 }
 
 func main() {
-	grid, mesh, err := track.LoadTrackFromImage("assets/track.png")
+	// For now, let's point to the processed Monza track
+	// trackPath := "assets/track.png"
+	trackPath := "processed_tracks/monza_10m.jpg"
+	grid, mesh, err := track.LoadTrackFromImage(trackPath)
 	if err != nil {
-		log.Fatal(err)
+		// Fallback to assets/track.png if not found
+		trackPath = "assets/track.png"
+		grid, mesh, err = track.LoadTrackFromImage(trackPath)
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
 
 	trackImg := RenderGrid(grid)
 
-	// TODO: figure out how to dynamically display one part of a big track - for example, the Nurburgring can't be shown in an 800x600 window as it's very big - the car will be barely visible.
-	ebiten.SetWindowSize(800, 600)
+	ebiten.SetWindowSize(WindowWidth, WindowHeight)
 	ebiten.SetWindowTitle("Racing Line Mapper")
+
+	// 1. Calculate Scale to fit
+	winW, winH := float64(WindowWidth), float64(WindowHeight)
+	scaleW := winW / float64(grid.Width)
+	scaleH := winH / float64(grid.Height)
+
+	viewScale := float32(scaleW)
+	if scaleH < scaleW {
+		viewScale = float32(scaleH)
+	}
+	// Add some margin
+	viewScale *= 0.95
+
+	// 2. Center the track
+	viewOffsetX := (float32(winW) - float32(grid.Width)*viewScale) / 2
+	viewOffsetY := (float32(winH) - float32(grid.Height)*viewScale) / 2
 
 	// Spawn car at first waypoint
 	startX, startY := 400.0, 110.0
+	startHeading := 0.0
 	if len(mesh.Waypoints) > 0 {
-		startX = mesh.Waypoints[0].Position.X
-		startY = mesh.Waypoints[0].Position.Y
+		// Start slightly ahead (5th waypoint) to avoid edge clipping
+		startIdx := 5
+		if startIdx >= len(mesh.Waypoints) {
+			startIdx = 0
+		}
+
+		wp := mesh.Waypoints[startIdx]
+		startX = wp.Position.X
+		startY = wp.Position.Y
+
+		// Align heading with track direction (Normal rotated 90 deg)
+		// Normal = (-dy, dx), so Direction = (dx, dy) = (Normal.Y, -Normal.X)
+		// Actually, let's just use the vector to the next waypoint
+		nextWP := mesh.Waypoints[(startIdx+1)%len(mesh.Waypoints)]
+		dx := nextWP.Position.X - wp.Position.X
+		dy := nextWP.Position.Y - wp.Position.Y
+		startHeading = math.Atan2(dy, dx)
 	}
 
 	car := physics.NewCar(startX, startY)
+	car.Heading = startHeading
 	ag := agent.NewAgent()
 
-	if err := ebiten.RunGame(&Game{Grid: grid, Mesh: mesh, TrackImage: trackImg, Car: car, Agent: ag, AIMode: true, Training: true}); err != nil {
+	game := &Game{
+		Grid:        grid,
+		Mesh:        mesh,
+		TrackImage:  trackImg,
+		Car:         car,
+		Agent:       ag,
+		AIMode:      true,
+		Training:    true,
+		ViewScale:   viewScale,
+		ViewOffsetX: viewOffsetX,
+		ViewOffsetY: viewOffsetY,
+	}
+
+	if err := ebiten.RunGame(game); err != nil {
 		log.Fatal(err)
 	}
 }

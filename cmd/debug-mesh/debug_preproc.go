@@ -52,6 +52,12 @@ func main() {
 		upperGreen := gocv.NewScalar(100, 255, 100, 0)
 		gocv.InRangeWithScalar(img, lowerGreen, upperGreen, &greenMask)
 
+		yellowMask := gocv.NewMat()
+		// Yellow in BGR is (0, 255, 255). Range: B:0-100, G:200-255, R:200-255
+		lowerYellow := gocv.NewScalar(0, 200, 200, 0)
+		upperYellow := gocv.NewScalar(100, 255, 255, 0)
+		gocv.InRangeWithScalar(img, lowerYellow, upperYellow, &yellowMask)
+
 		// 4. Preprocessing (Inversion and Grayscale)
 		gray := gocv.NewMat()
 		gocv.CvtColor(img, &gray, gocv.ColorBGRToGray)
@@ -65,8 +71,16 @@ func main() {
 		paddedGreen := gocv.NewMat()
 		gocv.CopyMakeBorder(greenMask, &paddedGreen, top, bottom, left, right, gocv.BorderConstant, color.RGBA{0, 0, 0, 0})
 
+		paddedYellow := gocv.NewMat()
+		gocv.CopyMakeBorder(yellowMask, &paddedYellow, top, bottom, left, right, gocv.BorderConstant, color.RGBA{0, 0, 0, 0})
+
 		// 5. Dynamic Kernel Detection
 		thresh := Threshold(gray, 150, 255)
+
+		// Force Green and Yellow markers to be part of the track
+		// This prevents holes if the markers are darker than the threshold due to color conversion
+		gocv.BitwiseOr(thresh, paddedGreen, &thresh)
+		gocv.BitwiseOr(thresh, paddedYellow, &thresh)
 
 		// Use a light-touch opening just to get a reliable width reading without dissolving the track
 		probe := Open(thresh, 3, 1)
@@ -109,18 +123,38 @@ func main() {
 		resizedGreen := gocv.NewMat()
 		gocv.Resize(paddedGreen, &resizedGreen, image.Point{}, scaleFactor, scaleFactor, gocv.InterpolationDefault)
 
+		resizedYellow := gocv.NewMat()
+		gocv.Resize(paddedYellow, &resizedYellow, image.Point{}, scaleFactor, scaleFactor, gocv.InterpolationDefault)
+
 		// 8. Final Reconstruction
 		finalRadius := int(math.Round(targetPixels / 2.0))
 		finalTrack := RestoreUniformThicknessManual(resizedThin, finalRadius)
 
+		// Output: White track on Black background
+		// Force the start/direction areas to be considered Track (White) to prevent holes
+		// caused by skeletonization potentially thinning them out.
+		// We use the resized masks for this.
+		gocv.BitwiseOr(finalTrack, resizedGreen, &finalTrack)
+		gocv.BitwiseOr(finalTrack, resizedYellow, &finalTrack)
+
 		finalBGR := gocv.NewMat()
 		gocv.CvtColor(finalTrack, &finalBGR, gocv.ColorGrayToBGR)
 
-		// Apply Start Marker
+		// Apply Start Marker (Red)
+		// We want the red dots to be on the track (White)
 		redMat := gocv.NewMatWithSizeFromScalar(gocv.NewScalar(0, 0, 255, 0), finalBGR.Rows(), finalBGR.Cols(), finalBGR.Type())
+
+		// The red dots should only appear where resizedGreen is white AND where we have track
 		startMaskFinal := gocv.NewMat()
 		gocv.BitwiseAnd(resizedGreen, finalTrack, &startMaskFinal)
+
 		redMat.CopyToWithMask(&finalBGR, startMaskFinal)
+
+		// Apply Direction Marker (Yellow)
+		yellowPaint := gocv.NewMatWithSizeFromScalar(gocv.NewScalar(0, 255, 255, 0), finalBGR.Rows(), finalBGR.Cols(), finalBGR.Type())
+		directionMaskFinal := gocv.NewMat()
+		gocv.BitwiseAnd(resizedYellow, finalTrack, &directionMaskFinal)
+		yellowPaint.CopyToWithMask(&finalBGR, directionMaskFinal)
 
 		// 9. Save result
 		outputPath := "./processed_tracks/" + inputFilename
@@ -132,7 +166,9 @@ func main() {
 		// Cleanup
 		gray.Close()
 		greenMask.Close()
+		yellowMask.Close()
 		paddedGreen.Close()
+		paddedYellow.Close()
 		thresh.Close()
 		probe.Close()
 		probeThin.Close()
@@ -140,10 +176,13 @@ func main() {
 		thin.Close()
 		resizedThin.Close()
 		resizedGreen.Close()
+		resizedYellow.Close()
 		finalTrack.Close()
 		finalBGR.Close()
 		redMat.Close()
 		startMaskFinal.Close()
+		yellowPaint.Close()
+		directionMaskFinal.Close()
 		img.Close()
 	}
 }

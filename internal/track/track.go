@@ -11,6 +11,7 @@ const (
 	CellGravel
 	CellStart
 	CellFinish
+	CellDirection // For manual heading hint
 )
 
 // Cell represents a single unit of the track.
@@ -55,19 +56,29 @@ func ColorToCellType(c color.Color) CellType {
 	// Normalize to 8-bit
 	r8, g8, b8 := r>>8, g>>8, b>>8
 
-	// Black/Dark Gray = Tarmac
-	if r8 < 50 && g8 < 50 && b8 < 50 {
+	// White/Light Gray = Tarmac
+	if r8 > 200 && g8 > 200 && b8 > 200 {
 		return CellTarmac
+	}
+	// Red = Start/Finish
+	if r8 > 200 && g8 < 100 && b8 < 100 {
+		return CellStart
+	}
+	// Yellow = Direction Hint
+	if r8 > 200 && g8 > 200 && b8 < 100 {
+		return CellDirection
 	}
 	// Green = Gravel
 	if g8 > r8+50 && g8 > b8+50 {
 		return CellGravel
 	}
-	// Red = Start/Finish
-	if r8 > g8+100 && r8 > b8+100 {
-		return CellStart // Treating as Start for now
+
+	// Default Fallback logic:
+	// If it's Dark, it's a Wall.
+	// If it's Bright (but didn't match above), it's likely an anti-aliased edge of a marker or track. Treat as Tarmac.
+	if r8 < 50 && g8 < 50 && b8 < 50 {
+		return CellWall
 	}
 
-	// Default to Wall (White or other)
-	return CellWall
+	return CellTarmac
 }
