@@ -49,6 +49,7 @@ var (
 // Visualization colors
 var (
 	ColorFrenetFrame = color.RGBA{50, 155, 50, 40} // Bright Green (was: 100, 200, 255, 150 for Cyan)
+	// ColorFrenetFrame = color.RGBA{255, 255, 255, 50} // White
 	ColorCar         = color.RGBA{255, 0, 0, 255}    // Red
 	ColorCarHeading  = color.RGBA{255, 255, 0, 255}  // Yellow
 	ColorBestLap     = color.RGBA{50, 255, 50, 150}  // Light Green

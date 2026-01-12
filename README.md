@@ -14,6 +14,59 @@ $ go run cmd/app/main.go
 - Go 1.22.4
 - Associated Go libs (can be installed by running ```go mod download``` on this repository folder of course)
 
+## Current State
+
+![Current State 1](screenshots/current_state_2026_01_12.jpg)
+![Current State 2](screenshots/current_state_2026_01_12_2.jpg)
+
+The visualization now features:
+- **Dark grayscale aesthetic**: Dark gray tarmac (80,80,80) on near-black background (10,10,10) for reduced eye strain
+- **Frenet frame mesh overlay**: Green ribs showing the track centerline mesh used for agent state discretization
+- **Dynamic HUD**: Status monitor (top-left) and agent parameters (top-right) that scale with window size
+- **Path visualization**: Current lap (yellow), best lap (light green), and lap history (fading magenta trails)
+- **Direction markers**: Red start line and yellow direction indicator for explicit initial heading
+
+### Configuration
+
+All simulation parameters are now consolidated at the top of `cmd/app/main.go` for easy tweaking:
+- **Input track path**: Switch between different preprocessed tracks
+- **Window dimensions**: Adjust render window size
+- **Simulation settings**: Training speed multiplier, car spawn position, view margins
+- **Color scheme**: All surface and visualization colors in one place
+
+### Mesh Generation
+
+The track mesh generation has been significantly refined:
+- **Yellow dot direction markers**: Manually place a yellow dot on the input image to explicitly define the initial track direction, eliminating the need for algorithmic guessing
+- **Optimized resolution**: `stepSize = 6.0` provides a balance between curve accuracy and performance
+- **Multi-pass refinement**: 
+  1. Initial pathfinding with visited-cell tracking and turning penalties
+  2. "Elastic Band" centering pass (10 iterations) to pull waypoints toward true centerline
+  3. Position smoothing (window=3) to remove jitter while preserving corner geometry
+  4. Separate normal smoothing (window=5) to eliminate visual "spikes" in Frenet frames
+- **Adaptive track width detection**: Automatically measures track width at start position for accurate mesh generation
+
+## Current State
+
+**This is still very much a work in progress.** The car doesn't even complete a single lap on real tracks like Monza yet. The agent crashes constantly, exploration is chaotic, and the Q-learning implementation needs serious work before it can produce anything resembling an optimal racing line.
+
+Current blockers:
+- **Agent can't complete laps**: The car crashes within seconds on complex tracks
+- **Epsilon decay too aggressive**: Exploration drops off before the agent learns basic track navigation
+- **Reward function needs tuning**: Current rewards don't effectively guide the agent toward lap completion
+- **State space might be too granular**: The car is making micro-adjustments every tick, leading to sinusoidal behavior on straights
+- **Mesh fitting in hairpins**: While improved, the Frenet frames still don't perfectly capture tight corners without increasing resolution
+
+The visualization and preprocessing pipeline are solid, but the actual learning component—the whole point of this project—is nowhere near functional. I'm documenting this honestly because pretending otherwise would be pointless.
+
+Next steps involve either:
+1. Implementing staged training (learn to stay on track first, optimize line later)
+2. Switching to Deep Q-Networks for better state representation
+3. Completely rethinking the reward structure
+4. Adding steering penalties to discourage the sinusoidal behaviour on relative straights
+
+Or maybe all of the above. We'll see.
+
 ## Technical details for nerds
 
 Currently the agent uses a Q-Table for learning, but I plan on implementing Deep Q in the future.
