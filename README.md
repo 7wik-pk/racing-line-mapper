@@ -1,7 +1,7 @@
 # MDP Racing Line Mapper
 A Markov Decision Process (MDP) based system for mapping out the optimal racing line on race tracks with configurable physics parameters (such as car's weight, horsepower, top speed, and track grip level, etc.)
 
-Currently a work in progress, but you can see a very basic implementation of the system - the car just runs in one big oval, which is boring and uninspired (\*cough\* *NASCAR* \*cough\*).
+Currently a work in progress, ~~but you can see a very basic implementation of the system - the car just runs in one big oval, which is boring and uninspired (\*cough\* *NASCAR* \*cough\*).~~ and while you can see screenshots of the current state, it's not very impressive just yet because the agent can't finish a single lap on either Monza or Spa. We'll get there soon enough, though.
 
 ## Running
 
