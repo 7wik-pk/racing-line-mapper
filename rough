@@ -27,3 +27,5 @@ current issues:
 - possible sinusoidal behaviour on straights - maybe due to high exploration rate & very finely quantized movement within the state space (i.e., the car is having to turn/coast/whatever every fraction of a second or pixel - increasing a "step" duration might help but it could bring issues of its own too)
     - rewarding straight driving (or slightly penalising steering to induce minimal steering) might be a good idea - could get the agent to begin driving straight and explore other options only if the car goes off track.
     - staged training might also alleviate this, among other things
+
+- epsilon is still decaying very fast
