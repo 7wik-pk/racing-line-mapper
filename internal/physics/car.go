@@ -37,9 +37,9 @@ func NewCar(x, y float64) *Car {
 	return &Car{
 		Position:       common.Vec2{X: x, Y: y},
 		Heading:        0,
-		Width:          10,   // ~2 meters at 0.2m/px
-		Length:         22.5, // ~4.5 meters at 0.2m/px
-		Checkpoint:     -1,   // Not started
+		Width:          2.0 * common.PixelsPerMeter, // 2 meters
+		Length:         4.5 * common.PixelsPerMeter, // 4.5 meters
+		Checkpoint:     -1,                          // Not started
 		LastLapTime:    0,
 		CurrentLapTime: 0,
 	}

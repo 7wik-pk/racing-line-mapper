@@ -38,15 +38,23 @@ I had to manually crop these images by hand so that only the track layout can be
 - Thresholding
 To produce a black and white image of the track map - this stage acts as a filter to remove all the unnecessary visual elements from our source images from shutterstock - such as the numbers, text, etc. All we want is the track's layout.
 - Morphological Opening 
-Since opening is the combination of erosion and dilation, this stage achieves 2 things: remove the thin pit lanes and small objects to smooth out the edges of the track, and also unconnected white pixel "leftovers" from the digits of corner/turn numbers in the source images, all while maintaining the original track's width - thanks to . This produces broken contours due to watermarks and other artefacts in the source/input images.
+Since opening is the combination of erosion and dilation, this stage achieves 2 things: remove the thin pit lanes and small objects to smooth out the edges of the track, and also unconnected white pixel "leftovers" from the digits of corner/turn numbers in the source images, all while maintaining the original track's width.
 
-Unfortunately this stage also requires manual intervention - different tracks require different kernel sizes for opening to achieve the desired result. It'll be a very daunting task to automate this, so I've moved on to other things instead for now.
+I spent way too much time trying to automate the "ideal" kernel size for this stage. Different tracks have different source resolutions, so a kernel that cleans Monza (12px wide) perfectly will completely dissolve Spa (6px wide). I eventually settled on a dynamic calculation: the script "probes" the track to find its input width, then sets the kernel size to **`Floor(inputWidth * 1.1)`** (clamped to at least 3). This seems to be the sweet spot for these specific shutterstock maps.
+
+- Resolution Calibration & Rescaling
+The system now automatically rescales input images to match our simulation's world scale. It checks for a pattern in the filename (e.g., `monza_10m.jpg`), calculates the actual pixel-width of the track, and resizes the entire image so that the track width in pixels matches our target meters at the simulation's `PixelsPerMeter` scale.
+
+- Manual Start Markers
+I tried (and failed) to use macro-template matching to automatically find the checkered finish line. ORB features were too noisy, and template correlation was matching random track curves and watermarks. So I've given up on full automation there—for now, manual intervention is required. You have to open the input image and draw a few **green dots** (at least 4px in diameter) where the start line should be. The preprocessor picks these up and converts them into the red start strip used by the simulation.
 
 - Skeletonization
 Essentially, thinning the track loop down to a single pixel to make the next step practically solvable.
+
 - Connecting endpoints (i.e., "linking" the broken contours)
-For each of the broken contours (segments of the track), the endpoints are found, and each of these endpoints are connected to their respective nearest neighbouring endpoints from other contours by drawing a straight line. This can at times cause inaccuracy - especially if gaps were present in curved parts of the track, those curved gaps will be filled with straight lines, so if this happens on hairpins it will look weird and result in very far-from-reality behaviour. I could not come up with a better, more accurate working solution in a reasonable period of time. Perhaps I'll revisit this some day.
-- Restoration of track width thickness is far from accurate - after skeletonization, the track is simply dilated to the thickness of the original image's thickness level - which essentially means the whole track will have constant width, as opposed to varying widths of these tracks in real life. This isn't too big of an issue as I'm only training agents to map out the optimal racing line by hotlapping alone.
+For each of the broken contours (segments of the track), the endpoints are found, and each of these endpoints are connected to their respective nearest neighbouring endpoints from other contours by drawing a straight line. This can at times cause inaccuracy—especially if gaps were present in curved parts of the track, those curved gaps will be filled with straight lines, so if this happens on hairpins it will look weird and result in very far-from-reality behaviour. I could not come up with a better, more accurate working solution in a reasonable period of time. Perhaps I'll revisit this some day.
+
+- Restoration of track width thickness is far from accurate—after skeletonization, the track is restored to its "target" thickness based on the real-world width and simulation scale. This means the whole track will have constant width, as opposed to varying widths of these tracks in real life. This isn't too big of an issue as I'm only training agents to map out the optimal racing line by hotlapping alone.
 
 As of now, I am experimenting with (cropped) track images from [this artist's shutterstock page](https://www.shutterstock.com/g/jzsoldos).
 
@@ -60,10 +68,10 @@ And I am working on the `debug_preproc.go` script to experiment and hone in on t
 The simulation uses a custom "Arcade" physics model that balances simplicity with the necessary dynamics for racing line optimization.
 
 ### Scale & Dimensions
-- **World Scale**: 1 pixel = 0.2 meters (20cm).
+- **World Scale**: 1 meter = 2.0 pixels (`PixelsPerMeter` in `internal/common/constants.go`).
 - **Car Model**: The car is modeled as a rectangle with realistic dimensions:
-    - **Width**: 10 pixels (~2.0 meters).
-    - **Length**: 22.5 pixels (~4.5 meters).
+    - **Width**: ~2.0 meters (4.0 pixels).
+    - **Length**: ~4.5 meters (9.0 pixels).
 
 ### Dynamics
 - **Inertia & Grip**: The car's velocity vector doesn't immediately snap to its heading. Instead, it "lerps" (linearly interpolates) towards the target heading based on a **Grip Factor**.
