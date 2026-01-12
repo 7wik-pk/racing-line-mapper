@@ -55,3 +55,25 @@ And I am working on the `debug_preproc.go` script to experiment and hone in on t
 - VTK (Visual Toolkit, for meshing the track),
 - HDF5 (for saving the track mesh),
 
+## Physics
+
+The simulation uses a custom "Arcade" physics model that balances simplicity with the necessary dynamics for racing line optimization.
+
+### Scale & Dimensions
+- **World Scale**: 1 pixel = 0.2 meters (20cm).
+- **Car Model**: The car is modeled as a rectangle with realistic dimensions:
+    - **Width**: 10 pixels (~2.0 meters).
+    - **Length**: 22.5 pixels (~4.5 meters).
+
+### Dynamics
+- **Inertia & Grip**: The car's velocity vector doesn't immediately snap to its heading. Instead, it "lerps" (linearly interpolates) towards the target heading based on a **Grip Factor**.
+    - **Tarmac**: High grip (0.9), allowing for sharp, precise turns.
+    - **Gravel/Off-track**: Low grip (0.5), causing the car to slide and lose directional control.
+- **Movement Forces**:
+    - **Acceleration/Braking**: Direct scalar adjustments to speed.
+    - **Friction**: A constant decay factor simulating air resistance and rolling resistance.
+    - **Terrain Resistance**: Driving on gravel applies a significantly higher friction penalty.
+
+### Collision Detection
+- **4-Corner Precision**: Collision is not checked at a single point. Instead, the system calculates the world-space coordinates of all **four corners** of the rectangular chassis every tick.
+- **Crash Mechanics**: If any corner of the car touches a `CellWall` (typically the white space in track images), the car is marked as `Crashed`, speed is zeroed, and the agent receives a major penalty.

@@ -213,12 +213,44 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	}
 
 	if g.Car != nil {
-		// Draw Car
-		vector.FillCircle(screen, float32(g.Car.Position.X), float32(g.Car.Position.Y), 5, color.RGBA{255, 0, 0, 255}, true)
+		// Draw Car as Rotated Rectangle
+		cosH := math.Cos(g.Car.Heading)
+		sinH := math.Sin(g.Car.Heading)
+		halfW := float32(g.Car.Width / 2)
+		halfL := float32(g.Car.Length / 2)
 
-		// Draw Heading
-		endX := g.Car.Position.X + math.Cos(g.Car.Heading)*10
-		endY := g.Car.Position.Y + math.Sin(g.Car.Heading)*10
+		// 4 corners
+		corners := [4][2]float32{
+			{halfL, halfW},
+			{halfL, -halfW},
+			{-halfL, -halfW},
+			{-halfL, halfW},
+		}
+
+		var path vector.Path
+		for i, p := range corners {
+			// Rotate and Translate
+			rx := float32(g.Car.Position.X) + p[0]*float32(cosH) - p[1]*float32(sinH)
+			ry := float32(g.Car.Position.Y) + p[0]*float32(sinH) + p[1]*float32(cosH)
+			if i == 0 {
+				path.MoveTo(rx, ry)
+			} else {
+				path.LineTo(rx, ry)
+			}
+		}
+		path.Close()
+
+		// Fill the rectangle using the modern FillPath API
+		var cs ebiten.ColorScale
+		cs.ScaleWithColor(color.RGBA{255, 0, 0, 255})
+		vector.FillPath(screen, &path, nil, &vector.DrawPathOptions{
+			AntiAlias:  true,
+			ColorScale: cs,
+		})
+
+		// Draw Heading (Slightly longer than car)
+		endX := g.Car.Position.X + math.Cos(g.Car.Heading)*(g.Car.Length/2+5)
+		endY := g.Car.Position.Y + math.Sin(g.Car.Heading)*(g.Car.Length/2+5)
 		vector.StrokeLine(screen, float32(g.Car.Position.X), float32(g.Car.Position.Y), float32(endX), float32(endY), 2, color.RGBA{255, 255, 0, 255}, true)
 	}
 

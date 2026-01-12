@@ -22,6 +22,10 @@ type Car struct {
 	Speed    float64 // Scalar speed (forward/backward)
 	Crashed  bool
 
+	// Dimensions (in pixels)
+	Width  float64
+	Length float64
+
 	// Race State
 	Checkpoint     int // Index of the last passed waypoint
 	Laps           int
@@ -33,7 +37,9 @@ func NewCar(x, y float64) *Car {
 	return &Car{
 		Position:       common.Vec2{X: x, Y: y},
 		Heading:        0,
-		Checkpoint:     -1, // Not started
+		Width:          10,   // ~2 meters at 0.2m/px
+		Length:         22.5, // ~4.5 meters at 0.2m/px
+		Checkpoint:     -1,   // Not started
 		LastLapTime:    0,
 		CurrentLapTime: 0,
 	}
@@ -87,31 +93,57 @@ func (c *Car) Update(grid *track.Grid, throttle, brake, steering float64) {
 	// Lower factor = more drift/ice. Higher factor = more grip.
 	grip := 0.9
 
-	// Check terrain using Mesh if available, fallback to Grid
-	// Note: We need to pass Mesh to Update now.
-	// For now, let's keep using Grid for friction/collision because it's faster than searching closest waypoint every frame without a spatial hash.
-	// But we will use Mesh for RL state later.
-
-	cellX := int(c.Position.X)
-	cellY := int(c.Position.Y)
-	cell := grid.Get(cellX, cellY)
-
-	switch cell.Type {
-	case track.CellGravel:
-		grip = 0.5
-		c.Speed *= (1.0 - OffTrackFriction) // Slow down on gravel
-	case track.CellWall:
-		c.Crashed = true
-		c.Speed = 0
-		return
+	// 4. Update Position
+	newPos := common.Vec2{
+		X: c.Position.X + c.Velocity.X,
+		Y: c.Position.Y + c.Velocity.Y,
 	}
 
+	// 5. Calculate Corners for Collision Detection
+	halfW := c.Width / 2
+	halfL := c.Length / 2
+	cosH := math.Cos(c.Heading)
+	sinH := math.Sin(c.Heading)
+
+	// Local corner offsets
+	offsets := []common.Vec2{
+		{X: halfL, Y: halfW},   // Front Right
+		{X: halfL, Y: -halfW},  // Front Left
+		{X: -halfL, Y: halfW},  // Rear Right
+		{X: -halfL, Y: -halfW}, // Rear Left
+	}
+
+	grip = 0.9
+	onGravel := false
+
+	for _, off := range offsets {
+		// Rotate and translate corner
+		worldX := newPos.X + off.X*cosH - off.Y*sinH
+		worldY := newPos.Y + off.X*sinH + off.Y*cosH
+
+		cellX := int(worldX)
+		cellY := int(worldY)
+		cell := grid.Get(cellX, cellY)
+
+		switch cell.Type {
+		case track.CellWall:
+			c.Crashed = true
+			c.Speed = 0
+			return
+		case track.CellGravel:
+			onGravel = true
+		}
+	}
+
+	if onGravel {
+		grip = 0.5
+		c.Speed *= (1.0 - OffTrackFriction) // Slow down on gravel
+	}
+
+	// Apply final movements
+	c.Position = newPos
 	c.Velocity.X = c.Velocity.X*(1-grip) + targetVx*grip
 	c.Velocity.Y = c.Velocity.Y*(1-grip) + targetVy*grip
-
-	// 5. Update Position
-	c.Position.X += c.Velocity.X
-	c.Position.Y += c.Velocity.Y
 
 	// Clamp speed
 	if c.Speed > MaxSpeed {
